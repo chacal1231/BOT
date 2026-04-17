@@ -1,74 +1,102 @@
-# WhatsApp Bot - TVYMAS Soporte Desactivado
+# WhatsApp Bot TVYMAS
 
-Bot de WhatsApp que desactiva el soporte por este canal y redirige a los usuarios a los canales oficiales de atención de TVYMAS.
+API en Node.js con Express y `whatsapp-web.js` para:
 
-## Estructura del Proyecto
+- responder automáticamente a mensajes entrantes de WhatsApp en chats individuales,
+- ignorar mensajes de grupos,
+- evitar loops con un bloqueo temporal de 5 minutos por usuario,
+- exponer endpoints HTTP para enviar mensajes a números o grupos manualmente.
 
+## Qué hace el proyecto
+
+Cuando un usuario escribe por WhatsApp:
+
+- si el mensaje viene de un grupo, el bot lo ignora,
+- si el mensaje viene de un chat individual y el usuario no está bloqueado, envía un mensaje automático de redirección,
+- después de responder, bloquea temporalmente a ese usuario por 5 minutos,
+- si el usuario vuelve a escribir durante ese tiempo, no responde nada,
+- cuando expira el bloqueo, no se envía ningún mensaje automático; solo queda habilitado para responder si la persona vuelve a escribir.
+
+## Stack
+
+- Node.js
+- Express
+- `whatsapp-web.js`
+- `qrcode-terminal`
+- autenticación persistente con `LocalAuth`
+
+## Estructura
+
+```text
+.
+├── server.js
+├── wpp.js
+├── conversationStore.js
+├── package.json
+└── README.md
 ```
-whatsapp-bot/
-├── server.js              # Servidor Express + arranque
-├── wpp.js                 # Cliente WhatsApp + lógica de mensajes
-├── conversationStore.js   # Control de estado con bloqueo temporal (Map + TTL)
-├── package.json           # Dependencias
-└── README.md              # Este archivo
-```
 
-## Requisitos Previos
+## Requisitos
 
-- **Node.js** >= 18.0.0
-- **Google Chrome** o **Chromium** instalado en el servidor (requerido por Puppeteer)
+- Node.js 18 o superior
+- `npm`
+- Google Chrome o Chromium disponible en el servidor
 
-### Instalar Chromium en Ubuntu/Debian:
+## Instalación
 
 ```bash
-sudo apt update
-sudo apt install -y chromium-browser
-# o en algunas distros:
-sudo apt install -y chromium
-```
-
-### Instalar dependencias del sistema para Puppeteer:
-
-```bash
-sudo apt install -y \
-    gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 \
-    libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 \
-    libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 \
-    libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 \
-    libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 \
-    libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 \
-    libxtst6 ca-certificates fonts-liberation libnss3 lsb-release \
-    xdg-utils wget
-```
-
-## Instalación y Ejecución
-
-```bash
-# 1. Clonar o copiar los archivos del proyecto
-
-# 2. Instalar dependencias de Node.js
 npm install
+```
 
-# 3. Ejecutar el servidor
-node server.js
+## Ejecución
+
+Modo normal:
+
+```bash
+npm start
+```
+
+Modo desarrollo:
+
+```bash
+npm run dev
 ```
 
 Al iniciar por primera vez:
-1. Se mostrará un **código QR** en la consola.
-2. Abre WhatsApp en tu teléfono → **Dispositivos vinculados** → **Vincular un dispositivo**.
-3. Escanea el QR.
-4. Una vez conectado, verás: `[WPP] Cliente de WhatsApp listo y conectado.`
 
-La sesión se guarda localmente en `./wpp-session/`, por lo que no necesitarás escanear el QR nuevamente en futuros reinicios.
+1. se mostrará un código QR en la terminal,
+2. abre WhatsApp en tu teléfono,
+3. entra a `Dispositivos vinculados`,
+4. escanea el QR,
+5. espera el mensaje de cliente conectado en consola.
 
-## Endpoints de la API
+La sesión queda persistida en la carpeta `./wpp-session`.
 
-### POST /EnviarMensajeNumero
+## Variables de entorno
 
-Envía un mensaje a un número específico.
+| Variable | Valor por defecto | Descripción |
+|---|---:|---|
+| `PORT` | `20000` | Puerto del servidor Express |
+
+## Endpoints
+
+### `POST /EnviarMensajeNumero`
+
+Envía un mensaje a un número individual.
+
+Body:
+
+```json
+{
+  "numero": "573001234567",
+  "mensaje": "Hola, este es un mensaje de prueba"
+}
+```
+
+Ejemplo:
 
 ```bash
-curl -X POST http://localhost:3000/EnviarMensajeNumero \
+curl -X POST http://localhost:20000/EnviarMensajeNumero \
   -H "Content-Type: application/json" \
   -d '{
     "numero": "573001234567",
@@ -76,12 +104,14 @@ curl -X POST http://localhost:3000/EnviarMensajeNumero \
   }'
 ```
 
-**Respuesta exitosa:**
+Respuesta exitosa:
+
 ```json
 {
   "success": true,
   "message": "Mensaje enviado correctamente.",
   "data": {
+    "success": true,
     "to": "573001234567@c.us",
     "timestamp": 1700000000,
     "messageId": "true_573001234567@c.us_ABC123"
@@ -89,26 +119,66 @@ curl -X POST http://localhost:3000/EnviarMensajeNumero \
 }
 ```
 
-### POST /EnviarMensajeGrupo
+Validaciones principales:
 
-Envía un mensaje a un grupo de WhatsApp.
+- `numero` es obligatorio,
+- `mensaje` es obligatorio,
+- el número debe contener entre 10 y 15 dígitos,
+- el mensaje no puede estar vacío.
+
+### `POST /EnviarMensajeGrupo`
+
+Envía un mensaje a un grupo.
+
+Body:
+
+```json
+{
+  "grupoId": "Nombre del grupo",
+  "mensaje": "Mensaje para el grupo"
+}
+```
+
+Ejemplo:
 
 ```bash
-curl -X POST http://localhost:3000/EnviarMensajeGrupo \
+curl -X POST http://localhost:20000/EnviarMensajeGrupo \
   -H "Content-Type: application/json" \
   -d '{
-    "grupoId": "120363012345678901@g.us",
-    "mensaje": "Mensaje al grupo"
+    "grupoId": "Soporte Interno",
+    "mensaje": "Mensaje para el grupo"
   }'
 ```
 
-### GET /status
+Respuesta exitosa:
 
-```bash
-curl http://localhost:3000/status
+```json
+{
+  "success": true,
+  "message": "Mensaje enviado al grupo correctamente.",
+  "data": {
+    "success": true,
+    "to": "Soporte Interno",
+    "timestamp": 1700000000,
+    "messageId": "true_120363000000000000@g.us_ABC123"
+  }
+}
 ```
 
-**Respuesta:**
+Nota importante:
+
+- aunque el campo se llama `grupoId`, el código actual busca el grupo por `chat.name`, es decir, por el nombre visible del grupo.
+
+### `GET /status`
+
+Devuelve el estado del servicio y algunas métricas básicas.
+
+```bash
+curl http://localhost:20000/status
+```
+
+Respuesta:
+
 ```json
 {
   "success": true,
@@ -116,56 +186,54 @@ curl http://localhost:3000/status
     "whatsappConnected": true,
     "blockedUsersCount": 3,
     "uptime": 1234.56,
-    "timestamp": "2025-01-15T10:30:00.000Z"
+    "timestamp": "2026-04-17T12:00:00.000Z"
   }
 }
 ```
 
-### GET /health
+### `GET /health`
+
+Health check simple del servidor.
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:20000/health
 ```
 
-## Comportamiento del Bot
+## Mensaje automático actual
 
-| Escenario | Acción |
-|---|---|
-| Mensaje de **grupo** | Se ignora completamente |
-| Mensaje **individual** (primera vez o después de 5 min) | Responde con el mensaje automático y bloquea 5 min |
-| Mensaje **individual** (durante bloqueo de 5 min) | Se ignora silenciosamente |
-| **Expiración** del bloqueo | Solo se elimina el estado. NO se envía nada |
-| Mensaje **individual** (después de expiración) | Responde nuevamente con el mensaje automático |
+```text
+🚫 Este canal ya no está habilitado para reportes de soporte.
 
-## Mensaje Automático
+📞 Para atención técnica inmediata, llámanos al +57 333 0334146 y con gusto te ayudamos.
 
-```
-📵 Este medio para reportar soporte fue desactivado.
+💼 ¿Facturación, cartera o nuevos servicios? Comunícate al +57 311 8479550.
 
-☎️ Por favor comuníquese a la línea: +57 333 0334146
+📧 También puedes escribirnos a noc@tvymas.co
 
-📧 O escriba a: noc@tvymas.co
-
-Si necesita algo más, por favor espere en la línea.
+Gracias por confiar en nosotros.
+Equipo TVYMAS 💙
 ```
 
-## Reglas Antiloop Implementadas
+## Lógica antispam y antiloop
 
-- ✅ **No existe** ningún `setInterval` que envíe mensajes.
-- ✅ **No hay** reenvío automático al expirar el timeout.
-- ✅ El control se hace con `Map` en memoria con TTL vía `setTimeout`.
-- ✅ El envío **solo ocurre** dentro del evento `message`.
-- ✅ El timeout **solo elimina** el estado del Map.
+- el bloqueo temporal dura 5 minutos,
+- el estado se guarda en memoria con un `Map`,
+- el desbloqueo ocurre con `setTimeout`,
+- al expirar el tiempo no se dispara ningún envío automático,
+- el bot nunca responde a sus propios mensajes,
+- los grupos se ignoran en el flujo de mensajes entrantes.
 
-## Variables de Entorno
+## Respuestas HTTP habituales
 
-| Variable | Default | Descripción |
-|---|---|---|
-| `PORT` | `3000` | Puerto del servidor Express |
+- `200` cuando la operación fue exitosa,
+- `400` cuando faltan campos o el body es inválido,
+- `404` cuando la ruta no existe,
+- `500` ante errores internos,
+- `503` cuando el cliente de WhatsApp no está listo.
 
-## Notas de Producción
+## Notas operativas
 
-- La sesión de WhatsApp se persiste en `./wpp-session/`.
-- En producción, considere usar un process manager como **PM2**: `pm2 start server.js --name whatsapp-bot`.
-- El QR solo se muestra en consola. En producción la sesión ya estará guardada.
-- Para reiniciar la sesión, elimine la carpeta `./wpp-session/` y reinicie.
+- La autenticación de WhatsApp se almacena localmente en `./wpp-session`.
+- Si necesitas reiniciar la sesión, elimina esa carpeta y vuelve a iniciar el proyecto.
+- En producción conviene ejecutar el servicio con PM2 o un process manager similar.
+- El contador de bloqueos es en memoria, así que se reinicia al reiniciar el proceso.
