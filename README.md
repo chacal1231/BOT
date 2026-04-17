@@ -5,7 +5,8 @@ API en Node.js con Express y `whatsapp-web.js` para:
 - responder automáticamente a mensajes entrantes de WhatsApp en chats individuales,
 - ignorar mensajes de grupos,
 - evitar loops con un bloqueo temporal de 5 minutos por usuario,
-- exponer endpoints HTTP para enviar mensajes a números o grupos manualmente.
+- exponer endpoints HTTP para enviar mensajes a números o grupos manualmente,
+- crear grupos de WhatsApp por API.
 
 ## Qué hace el proyecto
 
@@ -168,6 +169,40 @@ Respuesta exitosa:
 Nota importante:
 
 - aunque el campo se llama `grupoId`, el código actual busca el grupo por `chat.name`, es decir, por el nombre visible del grupo.
+
+### `POST /CrearGrupo`
+
+Crea un grupo de WhatsApp usando `client.createGroup(title, participants, options)`.
+
+Body:
+
+```json
+{
+  "titulo": "Clientes Prioritarios",
+  "participantes": ["573001234567", "573009876543"],
+  "opciones": {}
+}
+```
+
+Ejemplo:
+
+```bash
+curl -X POST http://localhost:20000/CrearGrupo \
+  -H "Content-Type: application/json" \
+  -d '{
+    "titulo": "Clientes Prioritarios",
+    "participantes": ["573001234567", "573009876543"],
+    "opciones": {}
+  }'
+```
+
+Notas:
+
+- `titulo` es obligatorio,
+- `participantes` debe ser un arreglo con al menos un número,
+- los números se convierten internamente al formato `@c.us`,
+- `opciones` es opcional y se envía tal cual a `createGroup`,
+- si la versión instalada de `whatsapp-web.js` no soporta `createGroup`, la API responderá con `501`.
 
 ### `GET /status`
 

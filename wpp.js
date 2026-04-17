@@ -242,9 +242,59 @@ async function enviarMensajeGrupo(grupoId, mensaje) {
    
 }
 
+/**
+ * Crea un grupo de WhatsApp.
+ *
+ * Basado en la API oficial de whatsapp-web.js:
+ * client.createGroup(title, participants, options)
+ *
+ * @param {string} titulo - Nombre del grupo
+ * @param {string[]} participantes - Números en formato internacional sin "+"
+ * @param {object} [opciones={}] - Opciones opcionales para createGroup
+ * @returns {Promise<object|string>} Resultado entregado por whatsapp-web.js
+ * @throws {Error} Si el cliente no está listo, no soporta createGroup o la creación falla
+ */
+async function crearGrupo(titulo, participantes, opciones = {}) {
+    if (!clientReady) {
+        throw new Error('El cliente de WhatsApp no está conectado.');
+    }
+
+    if (typeof client.createGroup !== 'function') {
+        throw new Error('La versión actual de whatsapp-web.js no soporta createGroup().');
+    }
+
+    const participantesFormateados = participantes.map((numero) => {
+        const numeroLimpio = String(numero).replace(/\D/g, '');
+
+        if (numeroLimpio.length < 10 || numeroLimpio.length > 15) {
+            throw new Error(`Formato de número inválido: ${numero}`);
+        }
+
+        return `${numeroLimpio}@c.us`;
+    });
+
+    try {
+        const result = await client.createGroup(
+            titulo.trim(),
+            participantesFormateados,
+            opciones
+        );
+
+        console.log(
+            `[WPP] Solicitud de creación de grupo procesada: ${titulo} (${participantesFormateados.length} participantes)`
+        );
+
+        return result;
+    } catch (error) {
+        console.error(`[WPP] Error creando grupo "${titulo}":`, error.message);
+        throw new Error(`No se pudo crear el grupo "${titulo}": ${error.message}`);
+    }
+}
+
 module.exports = {
     initClient,
     isClientReady,
     enviarMensajeNumero,
-    enviarMensajeGrupo
+    enviarMensajeGrupo,
+    crearGrupo
 };

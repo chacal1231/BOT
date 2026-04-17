@@ -7,6 +7,7 @@
  * ENDPOINTS:
  * - POST /EnviarMensajeNumero  → Envía mensaje a un número individual
  * - POST /EnviarMensajeGrupo   → Envía mensaje a un grupo
+ * - POST /CrearGrupo           → Crea un grupo de WhatsApp
  * - GET  /status               → Estado del cliente de WhatsApp
  * - GET  /health               → Health check del servidor
  */
@@ -16,7 +17,8 @@ const {
     initClient,
     isClientReady,
     enviarMensajeNumero,
-    enviarMensajeGrupo
+    enviarMensajeGrupo,
+    crearGrupo
 } = require('./wpp');
 const { getBlockedCount, clearAll } = require('./conversationStore');
 
@@ -169,6 +171,78 @@ app.post('/EnviarMensajeGrupo', async (req, res) => {
 });
 
 /**
+ * POST /CrearGrupo
+ *
+ * Crea un grupo de WhatsApp usando client.createGroup(title, participants, options).
+ *
+ * Body JSON esperado:
+ * {
+ *   "titulo": "Nombre del grupo",
+ *   "participantes": ["573001234567", "573009876543"],
+ *   "opciones": {}
+ * }
+ */
+app.post('/CrearGrupo', async (req, res) => {
+    try {
+        const { titulo, participantes, opciones } = req.body;
+
+        if (typeof titulo !== 'string' || titulo.trim().length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'El campo "titulo" es obligatorio y no puede estar vacío.'
+            });
+        }
+
+        if (!Array.isArray(participantes) || participantes.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'El campo "participantes" debe ser un arreglo con al menos un número.'
+            });
+        }
+
+        const participantesInvalidos = participantes.filter((numero) => {
+            const numeroLimpio = String(numero).replace(/\D/g, '');
+            return numeroLimpio.length < 10 || numeroLimpio.length > 15;
+        });
+
+        if (participantesInvalidos.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: `Hay números inválidos en "participantes": ${participantesInvalidos.join(', ')}`
+            });
+        }
+
+        if (opciones !== undefined && (typeof opciones !== 'object' || Array.isArray(opciones) || opciones === null)) {
+            return res.status(400).json({
+                success: false,
+                error: 'El campo "opciones" debe ser un objeto JSON válido.'
+            });
+        }
+
+        const result = await crearGrupo(titulo, participantes, opciones || {});
+
+        return res.status(200).json({
+            success: true,
+            message: 'Solicitud de creación de grupo procesada correctamente.',
+            data: result
+        });
+    } catch (error) {
+        console.error('[HTTP] Error en /CrearGrupo:', error.message);
+
+        const statusCode = error.message.includes('no está conectado')
+            ? 503
+            : error.message.includes('no soporta createGroup')
+                ? 501
+                : 500;
+
+        return res.status(statusCode).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
  * GET /status
  * 
  * Devuelve el estado actual del cliente de WhatsApp y estadísticas.
@@ -226,6 +300,7 @@ async function startServer() {
             console.log(`[Server] Endpoints disponibles:`);
             console.log(`         POST http://localhost:${PORT}/EnviarMensajeNumero`);
             console.log(`         POST http://localhost:${PORT}/EnviarMensajeGrupo`);
+            console.log(`         POST http://localhost:${PORT}/CrearGrupo`);
             console.log(`         GET  http://localhost:${PORT}/status`);
             console.log(`         GET  http://localhost:${PORT}/health`);
         });
