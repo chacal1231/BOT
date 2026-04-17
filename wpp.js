@@ -35,6 +35,10 @@ Equipo TVYMAS 💙`;
 // Estado del cliente
 let clientReady = false;
 
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Inicializar cliente de WhatsApp con autenticación local persistente
 const client = new Client({
     authStrategy: new LocalAuth({
@@ -273,12 +277,51 @@ async function crearGrupo(titulo, participantes, opciones = {}) {
         return `${numeroLimpio}@c.us`;
     });
 
+    // Normalizar opciones porque la typedef pública y la implementación interna
+    // de whatsapp-web.js no usan exactamente el mismo nombre para "announce".
+    const opcionesNormalizadas = { ...opciones };
+    if (opcionesNormalizadas.announce === undefined && opcionesNormalizadas.isAnnounce !== undefined) {
+        opcionesNormalizadas.announce = opcionesNormalizadas.isAnnounce;
+    }
+
     try {
         const result = await client.createGroup(
             titulo.trim(),
             participantesFormateados,
-            opciones
+            opcionesNormalizadas
         );
+
+        // Algunas instalaciones crean el grupo como "solo admins pueden enviar"
+        // aunque announce no se haya pedido. Reaplicamos la configuración al chat
+        // recién creado para dejar el estado final consistente con la solicitud.
+        if (result && typeof result === 'object' && result.gid?._serialized) {
+            const groupChatId = result.gid._serialized;
+            const adminsOnlyMessages = Boolean(opcionesNormalizadas.announce);
+            const adminsOnlyInfo = opcionesNormalizadas.isRestrict === undefined
+                ? true
+                : Boolean(opcionesNormalizadas.isRestrict);
+            const adminsOnlyAddMembers = Boolean(opcionesNormalizadas.memberAddMode);
+
+            let groupChat = null;
+            for (let attempt = 0; attempt < 5; attempt += 1) {
+                try {
+                    groupChat = await client.getChatById(groupChatId);
+                    if (groupChat) {
+                        break;
+                    }
+                } catch (error) {
+                    // El grupo puede tardar un poco en estar disponible justo después de crearse.
+                }
+
+                await sleep(1000);
+            }
+
+            if (groupChat && groupChat.isGroup) {
+                await groupChat.setMessagesAdminsOnly(adminsOnlyMessages);
+                await groupChat.setInfoAdminsOnly(adminsOnlyInfo);
+                await groupChat.setAddMembersAdminsOnly(adminsOnlyAddMembers);
+            }
+        }
 
         console.log(
             `[WPP] Solicitud de creación de grupo procesada: ${titulo} (${participantesFormateados.length} participantes)`

@@ -202,6 +202,8 @@ Notas:
 - `participantes` debe ser un arreglo con al menos un número,
 - los números se convierten internamente al formato `@c.us`,
 - `opciones` es opcional y se envía tal cual a `createGroup`,
+- para permitir que todos escriban, usa `"announce": false` o `"isAnnounce": false`,
+- la API reintenta aplicar la configuración del grupo después de crearlo para evitar que quede en modo "solo admins pueden enviar mensajes",
 - si la versión instalada de `whatsapp-web.js` no soporta `createGroup`, la API responderá con `501`.
 
 ### `GET /status`
